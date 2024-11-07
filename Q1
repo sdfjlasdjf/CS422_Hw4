@@ -1,0 +1,72 @@
+module SIMPLE-UNTYPED-SYNTAX
+  imports DOMAINS-SYNTAX
+
+  // ... existing syntax definitions ...
+
+  syntax Id ::= "main" [token]
+
+  // ... existing syntax definitions ...
+
+  syntax Stmt ::= "break" ";"
+                | "continue" ";"
+
+  // Adjusted syntax for for-loops to accept multiple statements in initialization
+  syntax Stmt ::= "for" "(" Stmts Exp ";" Exp ")" Block
+
+  // ... rest of the syntax definitions ...
+
+endmodule
+
+module SIMPLE-UNTYPED
+  imports SIMPLE-UNTYPED-SYNTAX
+  imports DOMAINS
+
+  // ... existing configurations and definitions ...
+
+  // Add break and continue as KItems
+  syntax KItem ::= "break"
+                 | "continue"
+
+  // Semantics for break and continue statements
+  rule break; => break
+  rule continue; => continue
+
+  // Remove the desugaring of for-loops into while-loops
+  // Remove the macro rule for for-loops
+  // Instead, define the semantics of for-loops directly
+
+  // Semantics for while-loops with break and continue
+  rule <k> while (E) S => whileLoop(E, S) </k>
+
+  syntax KItem ::= "whileLoop" "(" Exp "," Stmt ")"
+                 | "whileLoopCond" "(" Exp "," Stmt ")"
+                 | "whileLoopBody" "(" Exp "," Stmt ")"
+
+  rule <k> whileLoop(E, S) => E ~> whileLoopCond(E, S) </k>
+
+  rule <k> true ~> whileLoopCond(E, S) => S ~> whileLoopBody(E, S) </k>
+  rule <k> false ~> whileLoopCond(E, S) => .K </k>
+
+  rule <k> break ~> whileLoopBody(E, S) => .K </k>
+  rule <k> continue ~> whileLoopBody(E, S) => whileLoop(E, S) </k>
+  rule <k> .K ~> whileLoopBody(E, S) => whileLoop(E, S) </k>
+
+  // Semantics for for-loops with break and continue
+  rule <k> for (Init Cond; Step) Body => Init ~> forLoop(Cond, Step, Body) </k>
+
+  syntax KItem ::= "forLoop" "(" Exp "," Exp "," Stmt ")"
+                 | "forLoopCond" "(" Exp "," Exp "," Stmt ")"
+                 | "forLoopBody" "(" Exp "," Exp "," Stmt ")"
+
+  rule <k> forLoop(Cond, Step, Body) => Cond ~> forLoopCond(Cond, Step, Body) </k>
+
+  rule <k> true ~> forLoopCond(Cond, Step, Body) => Body ~> forLoopBody(Cond, Step, Body) </k>
+  rule <k> false ~> forLoopCond(Cond, Step, Body) => .K </k>
+
+  rule <k> break ~> forLoopBody(Cond, Step, Body) => .K </k>
+  rule <k> continue ~> forLoopBody(Cond, Step, Body) => Step ~> forLoop(Cond, Step, Body) </k>
+  rule <k> .K ~> forLoopBody(Cond, Step, Body) => Step ~> forLoop(Cond, Step, Body) </k>
+
+  // ... rest of the definitions ...
+
+endmodule
