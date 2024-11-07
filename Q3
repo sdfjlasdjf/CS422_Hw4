@@ -1,0 +1,135 @@
+module SIMPLE-TYPED-STATIC-SYNTAX
+  imports DOMAINS-SYNTAX
+
+  // ... existing syntax definitions ...
+
+  syntax Id ::= "main" [token]
+
+  // Types
+  syntax Type ::= "void" | "int" | "bool" | "string"
+                | Type "[" "]"
+                | "(" Type ")"           [bracket]
+                > Types "->" Type [function]
+
+  syntax Types ::= List{Type,","}        [overload(exps)]
+
+  // Throws clause
+  syntax Throws ::= "throws" Types
+
+  // Function declaration with optional throws clause
+  syntax Param ::= Type Id
+  syntax Params ::= List{Param,","}
+
+  syntax Stmt ::= Type Id "(" Params ")" Throws? Block
+
+  // ... rest of the syntax definitions ...
+
+endmodule
+
+module SIMPLE-TYPED-STATIC
+  imports SIMPLE-TYPED-STATIC-SYNTAX
+  imports DOMAINS
+
+  // Typing Environments and Exception Sets
+  syntax TypeEnv ::= Map
+  syntax ExceptionTypes ::= Set
+
+  // Typing Judgments
+  syntax KItem ::= TypeEnv "|-" Stmt ":" TypeEnv "," ExceptionTypes
+                 | TypeEnv "|-" Exp ":" Type "," ExceptionTypes
+
+  // Function Type with Optional Throws Clause
+  syntax FunctionType ::= Types "->" Type
+                        | FunctionType "throws" Types
+
+  // Adjust Type to include FunctionType
+  syntax Type ::= FunctionType
+
+  // Helper Functions to Extract Types
+  syntax Types ::= paramTypes(Params) [function]
+  syntax TypeEnv ::= paramEnv(Params) [function]
+
+  rule paramTypes(.Params) => .Types
+  rule paramTypes((T:Type _)) => T ,.Types
+  rule paramTypes((T:Type _) Ps:Params) => T , paramTypes(Ps)
+
+  rule paramEnv(.Params) => .Map
+  rule paramEnv((T:Type X:Id)) => X |-> T
+  rule paramEnv((T:Type X:Id) Ps:Params) => (X |-> T) paramEnv(Ps)
+
+  // Typing Rule for Function Declaration with Throws Clause
+  rule <k> TE |- T:Type F:Id(Ps:Params) Throws:Throws Block : TE, .Set </k>
+       <env> ... </env>
+    requires
+      ParamTypes == paramTypes(Ps)
+      andBool ParamEnv == paramEnv(Ps)
+      andBool FunctionType == ParamTypes -> T
+      andBool (Throws == (.Throws) andBool Es == .Set)
+            orBool (Throws == throws Es)
+            andBool FunctionType' == FunctionType throws Es
+      andBool TE1 == TE [F <- FunctionType']
+      andBool TE2 == TE1 ++ ParamEnv
+      andBool TE2 |- Block : _, Es_body
+      andBool Es_body SetSubsetEq Es
+
+  syntax Throws ::= ".Throws" [token]
+  rule Throws ==K .Throws => true
+
+  // Typing Rule for Function Call
+  rule <k> TE |- F:Id(Es:Exps) : T, Es_f </k>
+    requires
+      TE [F] ==K FunctionType'
+      andBool FunctionType' == ParamTypes -> T' throws Es_f
+      andBool checkArgs(TE, Es, ParamTypes)
+      andBool T ==K T'
+
+  // Helper Function to Check Arguments
+  syntax Bool ::= checkArgs(TypeEnv, Exps, Types) [function]
+  rule checkArgs(TE, .Exps, .Types) => true
+  rule checkArgs(TE, (E:Exp Es:Exps), (T:Type Ts:Types)) =>
+    (TE |- E : T_e, _) andBool T_e ==K T andBool checkArgs(TE, Es, Ts)
+  rule checkArgs(_, _, _) => false [owise]
+
+  // Typing Rule for Throw Statement
+  rule <k> TE |- throw E:Exp ; : TE, SetItem(T_e) </k>
+    requires TE |- E : T_e, _
+
+  // Typing Rule for Try-Catch Statement
+  rule <k> TE |- try S1 catch (T X) S2 : TE'', Es2 </k>
+    requires
+      TE |- S1 : TE', Es1
+      andBool TE [X <- T] |- S2 : TE'', Es2'
+      andBool Es2 == (Es1 SetDifference SetItem(T)) SetUnion Es2'
+
+  // Typing Rule for Statements Sequence
+  rule <k> TE |- (S1 S2) : TE'', Es12 </k>
+    requires
+      TE |- S1 : TE', Es1
+      andBool TE' |- S2 : TE'', Es2
+      andBool Es12 == Es1 SetUnion Es2
+
+  // Typing Rule for Expressions
+  // ... (define typing rules for expressions, collecting exception types)
+
+  // Typing Rule for Blocks
+  rule <k> TE |- {S} : TE', Es </k>
+    requires TE |- S : TE', Es
+
+  // Typing Rule for If Statement
+  rule <k> TE |- if (E) S1 else S2 : TE'', Es </k>
+    requires
+      TE |- E : bool, Es_e
+      andBool TE |- S1 : TE', Es1
+      andBool TE |- S2 : TE'', Es2
+      andBool Es == Es_e SetUnion Es1 SetUnion Es2
+
+  // Typing Rule for While Loop
+  rule <k> TE |- while (E) S : TE, Es </k>
+    requires
+      TE |- E : bool, Es_e
+      andBool TE |- S : _, Es_s
+      andBool Es == Es_e SetUnion Es_s
+
+  // ... rest of the typing rules for other statements ...
+
+endmodule
