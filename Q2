@@ -1,0 +1,43 @@
+module SIMPLE-TYPED-DYNAMIC
+  imports SIMPLE-TYPED-DYNAMIC-SYNTAX
+  imports DOMAINS
+
+  // ... existing configurations and definitions ...
+
+  // Adjusted exception handling rules
+
+  syntax KItem ::= (Param,Stmt,K,Map,ControlCellFragment)  // Param instead of Id
+
+  syntax KItem ::= "popx"
+
+  // Entering a try-catch block
+  rule <k> (try S1 catch(P) S2 => S1 ~> popx) ~> K </k>
+       <control>
+         <xstack> XStack => ListItem((P, S2, K, Env, C)) XStack </xstack>
+         C
+       </control>
+       <env> Env </env>
+
+  // Exiting a try-catch block normally
+  rule <k> popx => .K ...</k>
+       <xstack> ListItem(_) => XStack </xstack>
+
+  // Handling exception when types match
+  rule <k> throw V:Val; ~> _ => { T X = V; S2 } ~> K </k>
+       <control>
+         <xstack> ListItem((T:Type X:Id, S2, K, Env, C)) => XStack </xstack>
+         (_ => C)
+       </control>
+       <env> _ => Env </env>
+    requires typeOf(V) ==K T
+
+  // Propagating exception when types don't match
+  rule <k> throw V:Val; ~> _ => throw V; </k>
+       <control>
+         <xstack> ListItem(_) => XStack </xstack>
+       </control>
+    requires typeOf(V) =/=K T
+
+  // ... rest of the definitions ...
+
+endmodule
