@@ -1,0 +1,21 @@
+//Success
+// Program: Exception propagation with type mismatch
+try {
+  try {
+    throw 7;
+  } catch (bool x) {
+    print(1);
+  }
+} catch (int x) {
+  print(2);
+}
+
+
+
+//Fail
+// Program: Unhandled exception due to type mismatch
+try {
+  throw 7;
+} catch (bool x) {
+  print(1);
+}
