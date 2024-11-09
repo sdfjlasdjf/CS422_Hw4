@@ -1,0 +1,17 @@
+//Success
+// Program: Variable shadowing in inner block
+int main() {
+  int x;
+  {
+    int x;  // Allowed: shadows outer x
+  }
+}
+
+
+
+//Fail
+// Program: Redeclaration of variable in the same block
+int main() {
+  int x;
+  int x;  // Error: x redeclared in the same block
+}
