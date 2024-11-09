@@ -1,0 +1,19 @@
+//Success
+// Program: Function with throws clause
+int foo() throws int {
+  throw 7;
+}
+
+try {
+  foo();
+} catch (int x) {
+  print(x);
+}
+
+//Fail
+// Program: Function without throws clause but throws an exception
+int foo() {
+  throw 7;
+}
+
+foo();
