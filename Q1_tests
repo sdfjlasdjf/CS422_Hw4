@@ -1,0 +1,17 @@
+
+//Success
+// Program: Break in a loop
+var i = 0;
+while (i < 10) {
+  i = i + 1;
+  if (i == 5) {
+    break;
+  }
+}
+write(i);  // Should output 5
+
+
+//Fail
+// Program: Break outside of a loop
+var i = 0;
+break;  // Error: 'break' not within loop
