@@ -108,9 +108,6 @@ module SIMPLE-TYPED-STATIC
       andBool TE' |- S2 : TE'', Es2
       andBool Es12 == Es1 SetUnion Es2
 
-  // Typing Rule for Expressions
-  // ... (define typing rules for expressions, collecting exception types)
-
   // Typing Rule for Blocks
   rule <k> TE |- {S} : TE', Es </k>
     requires TE |- S : TE', Es
