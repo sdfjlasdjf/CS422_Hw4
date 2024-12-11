@@ -1,43 +1,50 @@
-module SIMPLE-TYPED-DYNAMIC
-  imports SIMPLE-TYPED-DYNAMIC-SYNTAX
-  imports DOMAINS
+module SIMPLE-TYPED-DYNAMIC-EXCEPTIONS-PROPAGATION
+  imports SIMPLE-TYPED-DYNAMIC // from your provided code
 
-  // ... existing configurations and definitions ...
+  // We override the exception handling rules here to allow propagation
 
-  // Adjusted exception handling rules
-
-  syntax KItem ::= (Param,Stmt,K,Map,ControlCellFragment)  // Param instead of Id
-
+  syntax KItem ::= (Param,Stmt,K,Map,ControlCellFragment)
   syntax KItem ::= "popx"
 
-  // Entering a try-catch block
+  // Original rule:
+  // rule <k> (try S1 catch(P) S2 => S1 ~> popx) ~> K </k>
+  //       <control>
+  //         <xstack> .List => ListItem((P, S2, K, Env, C)) ...</xstack>
+  //         C
+  //       </control>
+  //       <env> Env </env>
+
   rule <k> (try S1 catch(P) S2 => S1 ~> popx) ~> K </k>
        <control>
-         <xstack> XStack => ListItem((P, S2, K, Env, C)) XStack </xstack>
+         <xstack> .List => ListItem((P:Param, S2, K, Env, C)) ...</xstack>
          C
        </control>
        <env> Env </env>
 
-  // Exiting a try-catch block normally
   rule <k> popx => .K ...</k>
-       <xstack> ListItem(_) => XStack </xstack>
+       <xstack> ListItem(_) => .List ...</xstack>
 
-  // Handling exception when types match
+  // Modified throw rule:
+  // If type matches, handle exception:
   rule <k> throw V:Val; ~> _ => { T X = V; S2 } ~> K </k>
        <control>
-         <xstack> ListItem((T:Type X:Id, S2, K, Env, C)) => XStack </xstack>
+         <xstack> ListItem((T:Type X:Id, S2, K, Env, C)) => .List ...</xstack>
          (_ => C)
        </control>
        <env> _ => Env </env>
     requires typeOf(V) ==K T
 
-  // Propagating exception when types don't match
-  rule <k> throw V:Val; ~> _ => throw V; </k>
+  // If type does NOT match, pop the current handler and re-throw:
+  rule <k> throw V:Val; => throw V; ...</k>
        <control>
-         <xstack> ListItem(_) => XStack </xstack>
+         <xstack> ListItem((T:Type _, _, _, _, _)) => XS </xstack>
        </control>
-    requires typeOf(V) =/=K T
+    requires notBool(typeOf(V) ==K T)
 
-  // ... rest of the definitions ...
+  // If no handlers match and no handlers left:
+  // If we run out of xstack items while re-throwing, stuck:
+  rule <k> throw V:Val; => .K ...</k>
+       <control> <xstack> .List </xstack> </control>
+    [owise] // gets stuck
 
 endmodule
