@@ -1,72 +1,152 @@
 module SIMPLE-UNTYPED-SYNTAX
   imports DOMAINS-SYNTAX
 
-  // ... existing syntax definitions ...
+  syntax AExp  ::= Int | Id
+                 | "-" Int
+                 | AExp "/" AExp              [left, strict]
+                 | "(" AExp ")"               [bracket]
+                 > AExp "+" AExp              [left, strict]
 
-  syntax Id ::= "main" [token]
+  syntax BExp  ::= Bool
+                 | AExp "<=" AExp             [seqstrict]
+                 | "!" BExp                   [strict]
+                 | "(" BExp ")"               [bracket]
+                 > BExp "&&" BExp             [left, strict(1)]
 
-  // ... existing syntax definitions ...
+  syntax Block ::= "{" "}"
+                 | "{" Stmt "}"
 
-  syntax Stmt ::= "break" ";"
-                | "continue" ";"
+  syntax Stmt  ::= Block
+                 | Id "=" AExp ";"            [strict(2)]
+                 | "if" "(" BExp ")" Block "else" Block  [strict(1)]
+                 | "while" "(" BExp ")" Block
+                 | "break" ";"
+                 | "continue" ";"
+                 > Stmt Stmt                  [left]
 
-  // Adjusted syntax for for-loops to accept multiple statements in initialization
-  syntax Stmt ::= "for" "(" Stmts Exp ";" Exp ")" Block
-
-  // ... rest of the syntax definitions ...
-
+  syntax Pgm ::= "int" Ids ";" Stmt
+  syntax Ids ::= List{Id,","}
 endmodule
+
 
 module SIMPLE-UNTYPED
   imports SIMPLE-UNTYPED-SYNTAX
   imports DOMAINS
 
-  // ... existing configurations and definitions ...
+  syntax KResult ::= Int | Bool
+  syntax KItem ::= "undefined"
 
-  // Add break and continue as KItems
-  syntax KItem ::= "break"
-                 | "continue"
+  configuration <T color="red">
+                  <threads color="orange">
+                    <thread multiplicity="*" type="Map">
+                      <k color="green"> $PGM:Pgm </k>
+                      <control color="cyan">
+                        <fstack color="blue"> .List </fstack>
+                        <xstack color="purple"> .List </xstack>
+                        <loopstack color="LimeGreen"> .List </loopstack>
+                      </control>
+                      <env color="violet"> .Map </env>
+                      <holds color="black"> .Map </holds>
+                    </thread>
+                  </threads>
+                  <genv color="pink"> .Map </genv>
+                  <store color="white"> .Map </store>
+                  <busy color="cyan"> .Set </busy>
+                  <state> .Map </state>
+                  <terminated color="red"> .Set </terminated>
+                  <input color="magenta" stream="stdin"> .List </input>
+                  <output color="brown" stream="stdout"> .List </output>
+                  <nextLoc color="gray"> 0 </nextLoc>
+                </T>
 
-  // Semantics for break and continue statements
-  rule break; => break
-  rule continue; => continue
+  // AExp
+  rule <k> X:Id => I ...</k> <state>... X |-> I ...</state> requires isInt(I)
+  rule I1 / I2 => I1 /Int I2 requires I2 =/=Int 0
+  rule I1 + I2 => I1 +Int I2
+  rule - I1 => 0 -Int I1
 
-  // Remove the desugaring of for-loops into while-loops
-  // Remove the macro rule for for-loops
-  // Instead, define the semantics of for-loops directly
+  // BExp
+  rule I1 <= I2 => I1 <=Int I2
+  rule ! T => notBool T
+  rule true && B => B
+  rule false && _ => false
 
-  // Semantics for while-loops with break and continue
-  rule <k> while (E) S => whileLoop(E, S) </k>
+  // Block
+  rule {} => .K
+  rule {S} => S
 
-  syntax KItem ::= "whileLoop" "(" Exp "," Stmt ")"
-                 | "whileLoopCond" "(" Exp "," Stmt ")"
-                 | "whileLoopBody" "(" Exp "," Stmt ")"
+  // Stmt
+  rule S1:Stmt S2:Stmt => S1 ~> S2
 
-  rule <k> whileLoop(E, S) => E ~> whileLoopCond(E, S) </k>
+  // Assignments
+  rule <k> X = I:Int; => .K ...</k> <state>... X |-> (_ => I) ...</state>
 
-  rule <k> true ~> whileLoopCond(E, S) => S ~> whileLoopBody(E, S) </k>
-  rule <k> false ~> whileLoopCond(E, S) => .K </k>
+  // If-else
+  rule if (true)  S else _ => S
+  rule if (false) _ else S => S
 
-  rule <k> break ~> whileLoopBody(E, S) => .K </k>
-  rule <k> continue ~> whileLoopBody(E, S) => whileLoop(E, S) </k>
-  rule <k> .K ~> whileLoopBody(E, S) => whileLoop(E, S) </k>
+  // While loops
+  // Introduce a loop marker when expanding while loops
+  syntax KItem ::= "LOOPMARK"
+  rule <k> while (B) S => pushLoop(B,S) ...</k>
+  
+  syntax KItem ::= "#pushLoop"
+  syntax KItem ::= pushLoop(BExp, Block) [function]
+  rule pushLoop(B,S) => #pushLoop ~> if(B){ S while(B)S } else {}
+  
+  // #pushLoop adds a marker to the loopstack
+  rule <k> #pushLoop => .K ...</k> <control>... <loopstack> LS => LOOPMARK LS </loopstack> </control>
 
-  // Semantics for for-loops with break and continue
-  rule <k> for (Init Cond; Step) Body => Init ~> forLoop(Cond, Step, Body) </k>
 
-  syntax KItem ::= "forLoop" "(" Exp "," Exp "," Stmt ")"
-                 | "forLoopCond" "(" Exp "," Exp "," Stmt ")"
-                 | "forLoopBody" "(" Exp "," Exp "," Stmt ")"
+  // break;
+  // On break, we must remove the innermost LOOPMARK and skip out of the current loop structure.
+  // The loop structure is: if(B) { S while(B)S } else {}
+  // break should rewrite to skip directly to the else branch.
+  rule <k> break; => #breakFound ...</k>
+  syntax KItem ::= "#breakFound"
+  rule <k> #breakFound => .K ...</k>
+       <control> <loopstack> LOOPMARK LS => LS </loopstack> </control>
 
-  rule <k> forLoop(Cond, Step, Body) => Cond ~> forLoopCond(Cond, Step, Body) </k>
 
-  rule <k> true ~> forLoopCond(Cond, Step, Body) => Body ~> forLoopBody(Cond, Step, Body) </k>
-  rule <k> false ~> forLoopCond(Cond, Step, Body) => .K </k>
+  // We'll implement a search using a heating/cooling-like technique:
+  syntax KItem ::= breakLoop(BExp, Block)
+  // If we reach an upper level while(B)S expansion:
+  rule <k> while(B) S => {} ...</k> <k> breakLoop(B, S) => .K </k>
 
-  rule <k> break ~> forLoopBody(Cond, Step, Body) => .K </k>
-  rule <k> continue ~> forLoopBody(Cond, Step, Body) => Step ~> forLoop(Cond, Step, Body) </k>
-  rule <k> .K ~> forLoopBody(Cond, Step, Body) => Step ~> forLoop(Cond, Step, Body) </k>
+  // If break occurs inside a sequence of statements:
+  rule break; => breakLoop(_,_) [owise]
 
-  // ... rest of the definitions ...
 
+  // We'll do a trick: whenever we see break, we raise a special symbol that bubble up and rewrite the parent's while structure:
+  syntax KItem ::= "BREAK-LOOP"
+  rule <k> break; => BREAK-LOOP ...</k>
+
+  // On encountering BREAK-LOOP while looking at a while expansion:
+  rule <k> S while(B) S' => {} ...</k> <k> BREAK-LOOP => .K ...</k>
+       <control><loopstack>LOOPMARK LS => LS</loopstack></control>
+
+  // If BREAK-LOOP goes up and no loop found:
+  rule <k> BREAK-LOOP => .K ...</k> [owise]
+    // If no loop marker is found, stuck.
+
+  // continue;
+  // Similar to break, continue should jump to the next iteration of the loop.
+  rule <k> continue; => CONTINUE-LOOP ...</k>
+  syntax KItem ::= "CONTINUE-LOOP"
+  // On continue, we skip the rest of S and jump back to check condition B of while.
+  rule <k> S while(B) S' => while(B) S' ...</k> <k> CONTINUE-LOOP => .K ...</k>
+    // If no loop marker is found for continue:
+  rule <k> CONTINUE-LOOP => .K ...</k> [owise]
+
+  // If-else
+  rule if (true) S else _ => S
+  rule if (false) _ else S => S
+
+
+  // Pgm
+  syntax KItem ::= "undefined"
+  rule <k> int (X,Xs => Xs);_ </k> <state> Rho:Map (.Map => X|->undefined) </state>
+    requires notBool (X in keys(Rho))
+  rule int .Ids; S => S
+  // no other changes needed
 endmodule
