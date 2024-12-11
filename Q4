@@ -1,80 +1,61 @@
-module SIMPLE-TYPED-STATIC
-  imports SIMPLE-TYPED-STATIC-SYNTAX
-  imports DOMAINS
+module SIMPLE-TYPED-STATIC-REDECL
+  imports SIMPLE-TYPED-STATIC-EXCEPTIONS
+  imports DOMAINS-SYNTAX
 
-  // Typing Environments and Exception Sets
-  syntax TypeEnv ::= Map
-  syntax ExceptionTypes ::= Set
 
-  // Typing Judgments with Declared Variables
-  syntax KItem ::= TypeEnv "," Set{Id} "|-" Stmt ":" TypeEnv "," ExceptionTypes
+  // Extend the variable declaration to include a check for redeclaration
+  syntax Stmt ::= "declareVar" "(" Type "," Id ")" [function]
+  
+  // Rule for declaring a variable within the current tenv
+  rule <k> declareVar(T, X) => addVar(T, X) ...</k>
+       <tenv> Rho </tenv>
+    requires notBool(X in keys(Rho))
+    =>
+      // Add variable to the type environment
+      addVar(T, X)
+  
+  // Define addVar helper function
+  syntax Stmt ::= "addVar" "(" Type "," Id ")" [function]
+  
+  rule addVar(T, X) => .K
+       <tenv> Rho => Rho[X <- T] </tenv>
+       <store>... .Map => L |-> undefined(T) ...</store>
+       <nextLoc> L:Int => L +Int 1 </nextLoc>
+  
+  // If redeclaration occurs, no rule matches, and the type checker gets stuck
 
-  // Variable Declaration with check for redeclaration
-  rule <k> TE, DV |- T:Type X:Id; : TE', DV', .Set </k>
-    requires notBool X in DV
-    andBool TE' == TE [X <- T]
-    andBool DV' == DV SetUnion SetItem(X)
+  // Modify block rule to handle local environments
+  rule <k> { S } => pushLocalEnv ~> S ~> popLocalEnv ...</k>
+       <tenv> Rho </tenv>
+    =>
+      // Push a new local environment, possibly shadowing variables
+      pushLocalEnv(Rho)
 
-  // Statement Sequence
-  rule <k> TE, DV |- (S1 S2) : TE'', DV'', Es1 SetUnion Es2 </k>
-    requires
-      TE, DV |- S1 : TE', DV', Es1
-      andBool TE', DV' |- S2 : TE'', DV'', Es2
+  // Define pushLocalEnv and popLocalEnv
+  syntax KItem ::= "pushLocalEnv" "(" Map ")" [function]
+  syntax KItem ::= "popLocalEnv" [function]
 
-  // Blocks: Reset DV to empty set when entering a new block
-  rule <k> TE |- { S } : TE', Es </k>
-    requires
-      TE, .Set |- S : TE', _, Es
+  rule <k> pushLocalEnv(Rho) => .K ...</k>
+       <control> <tenv> CurrentEnv => Rho </tenv> </control>
+  
+  rule <k> popLocalEnv => .K ...</k>
+       <control> <tenv> PreviousEnv </tenv> </control>
+  
+  // Modify the block to declare variables using declareVar
+  // These are already handled by the declareVar rules above
 
-  // If Statement
-  rule <k> TE, DV |- if (E) S1 else S2 : TE'', DV, Es </k>
-    requires
-      TE |- E : bool, Es_e
-      andBool TE, DV |- S1 : TE1, DV1, Es1
-      andBool TE, DV |- S2 : TE2, DV2, Es2
-      andBool TE'' == mergeEnvs(TE1, TE2)
-      andBool Es == Es_e SetUnion Es1 SetUnion Es2
+  // Example for handling declarations inside blocks
+  // Assume that "int x;" is parsed as "declareVar(int, x);"
+  
+  // Modify the 'declareVar' syntax to be triggered by variable declarations
+  rule <k> T:Type X:Id; => declareVar(T, X) ...</k>
+       <tenv> Rho </tenv>
+    requires notBool(X in keys(Rho))
+    =>
+      declareVar(T, X)
+  
+  // If redeclaration occurs, the 'declareVar' rule does not match, and type checker gets stuck
 
-  // While Loop
-  rule <k> TE, DV |- while (E) S : TE', DV, Es </k>
-    requires
-      TE |- E : bool, Es_e
-      andBool TE, DV |- S : TE_s, DV_s, Es_s
-      andBool TE' == TE_s  // Environment remains unchanged
-      andBool Es == Es_e SetUnion Es_s
-
-  // Function Declaration
-  rule <k> TE |- T:Type F:Id(Ps:Params) Block : TE', Es </k>
-    requires
-      ParamTypes == paramTypes(Ps)
-      andBool ParamEnv == paramEnv(Ps)
-      andBool FunctionType == ParamTypes -> T
-      andBool TE1 == TE [F <- FunctionType]
-      andBool TE2 == TE1 ++ ParamEnv
-      andBool TE2, .Set |- Block : TE', _, Es
-
-  // Other typing rules adjust accordingly, passing DV and updating DV'
-
-  // Helper Functions to Extract Types and Environments
-  syntax Types ::= paramTypes(Params) [function]
-  syntax TypeEnv ::= paramEnv(Params) [function]
-
-  rule paramTypes(.Params) => .Types
-  rule paramTypes((T:Type _)) => T ,.Types
-  rule paramTypes((T:Type _) Ps:Params) => T , paramTypes(Ps)
-
-  rule paramEnv(.Params) => .Map
-  rule paramEnv((T:Type X:Id)) => X |-> T
-  rule paramEnv((T:Type X:Id) Ps:Params) => (X |-> T) paramEnv(Ps)
-
-  // Typing Rule for Expressions
-  syntax KItem ::= TypeEnv "|-" Exp ":" Type "," ExceptionTypes
-
-  // Variable Lookup
-  rule <k> TE |- X:Id : T, .Set </k>
-    requires X in_keys TE
-    andBool T == TE[X]
-
-  // ... rest of the typing rules for expressions ...
-
+  // Example test cases can be handled externally
+    
 endmodule
