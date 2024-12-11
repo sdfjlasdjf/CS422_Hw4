@@ -147,6 +147,5 @@ module SIMPLE-TYPED-STATIC-EXCEPTIONS
            .K // stuck or rethrow
          }
   
-  // Additional rules and helpers as necessary
   
 endmodule
