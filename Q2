@@ -1,50 +1,67 @@
 module SIMPLE-TYPED-DYNAMIC-EXCEPTIONS-PROPAGATION
-  imports SIMPLE-TYPED-DYNAMIC // from your provided code
+  imports SIMPLE-TYPED-DYNAMIC 
+  imports DOMAINS 
 
-  // We override the exception handling rules here to allow propagation
+  syntax ExceptionHandler ::= "ExceptionHandler" "(" Param "," Stmt "," K "," Map "," ControlCellFragment ")"
 
-  syntax KItem ::= (Param,Stmt,K,Map,ControlCellFragment)
-  syntax KItem ::= "popx"
+  syntax KItem ::= ExceptionHandler | "popx" | "K"
 
-  // Original rule:
-  // rule <k> (try S1 catch(P) S2 => S1 ~> popx) ~> K </k>
-  //       <control>
-  //         <xstack> .List => ListItem((P, S2, K, Env, C)) ...</xstack>
-  //         C
-  //       </control>
-  //       <env> Env </env>
 
-  rule <k> (try S1 catch(P) S2 => S1 ~> popx) ~> K </k>
+  configuration <T>
+                  <threads>
+                    <thread>
+                      <k> $PGM:Pgm </k>
+                      <control>
+                        <fstack> .List </fstack>
+                        <xstack> .List </xstack> // Exception stack
+                        <loopstack> .List </loopstack> // If used for loops
+                        <otherControlCells> ... </otherControlCells>
+                      </control>
+                      <env> .Map </env>
+                      <holds> .Map </holds>
+                    </thread>
+                  </threads>
+                  <genv> .Map </genv>
+                  <store> .Map </store>
+                  <busy> .Set </busy>
+                  <terminated> .Set </terminated>
+                  <input> .List </input>
+                  <output> .List </output>
+                  <nextLoc> 0 </nextLoc>
+                </T>
+
+rule <k> (try S1 catch(P) S2 => S1 ~> popx) ~> K </k>
        <control>
-         <xstack> .List => ListItem((P:Param, S2, K, Env, C)) ...</xstack>
+         <xstack> .List => ListItem(ExceptionHandler(P, S2, K, Env, C)) ...</xstack>
          C
        </control>
        <env> Env </env>
+  requires isStmt(S1) andBool isStmt(S2) andBool isParam(P)
 
+  // Rule to pop the top exception handler from the xstack
   rule <k> popx => .K ...</k>
-       <xstack> ListItem(_) => .List ...</xstack>
+       <xstack> ListItem(ExceptionHandler(_, _, _, _, _)) => .List ...</xstack>
 
-  // Modified throw rule:
-  // If type matches, handle exception:
+  // Rule to handle a throw when the exception type matches the handler
   rule <k> throw V:Val; ~> _ => { T X = V; S2 } ~> K </k>
        <control>
-         <xstack> ListItem((T:Type X:Id, S2, K, Env, C)) => .List ...</xstack>
+         <xstack> ListItem(ExceptionHandler(T, S2, K, Env, C)) => .List ...</xstack>
          (_ => C)
        </control>
-       <env> _ => Env </env>
+       <env> Env </env>
     requires typeOf(V) ==K T
 
-  // If type does NOT match, pop the current handler and re-throw:
+  // Rule to propagate the exception when the type does not match
   rule <k> throw V:Val; => throw V; ...</k>
        <control>
-         <xstack> ListItem((T:Type _, _, _, _, _)) => XS </xstack>
+         <xstack> ListItem(ExceptionHandler(T, _, _, _, _)) => XS </xstack>
        </control>
     requires notBool(typeOf(V) ==K T)
 
-  // If no handlers match and no handlers left:
-  // If we run out of xstack items while re-throwing, stuck:
+  // Rule to handle uncaught exceptions by getting stuck
   rule <k> throw V:Val; => .K ...</k>
        <control> <xstack> .List </xstack> </control>
-    [owise] // gets stuck
+    [owise] // Program gets stuck due to uncaught exception
+
 
 endmodule
