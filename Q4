@@ -44,9 +44,7 @@ module SIMPLE-TYPED-STATIC-REDECL
   // Modify the block to declare variables using declareVar
   // These are already handled by the declareVar rules above
 
-  // Example for handling declarations inside blocks
-  // Assume that "int x;" is parsed as "declareVar(int, x);"
-  
+  // Example for handling declarations inside blocks  
   // Modify the 'declareVar' syntax to be triggered by variable declarations
   rule <k> T:Type X:Id; => declareVar(T, X) ...</k>
        <tenv> Rho </tenv>
@@ -55,7 +53,5 @@ module SIMPLE-TYPED-STATIC-REDECL
       declareVar(T, X)
   
   // If redeclaration occurs, the 'declareVar' rule does not match, and type checker gets stuck
-
-  // Example test cases can be handled externally
     
 endmodule
