@@ -1,132 +1,152 @@
-module SIMPLE-TYPED-STATIC-SYNTAX
+module SIMPLE-TYPED-STATIC-EXCEPTIONS
+  imports SIMPLE-TYPED-STATIC 
   imports DOMAINS-SYNTAX
 
-  // ... existing syntax definitions ...
+  // Extend syntax to include 'throws' clauses in function declarations
+  syntax ParamThrows ::= "throws" TypeList
+  syntax ParamsAndThrows ::= Params ParamThrows | Params
 
-  syntax Id ::= "main" [token]
+  // Define TypeList for listing multiple exception types
+  syntax TypeList ::= List{Type,","}
 
-  // Types
-  syntax Type ::= "void" | "int" | "bool" | "string"
-                | Type "[" "]"
-                | "(" Type ")"           [bracket]
-                > Types "->" Type [function]
+  // Update function declarations to include throws
+  syntax Stmt ::= Type Id "(" ParamsAndThrows ")" Block
 
-  syntax Types ::= List{Type,","}        [overload(exps)]
+  // Update function types to include throws
+  syntax Type ::= "(" TypeList ")" "->" Type  
+                 | "(" Types ")" "->" Type    
 
-  // Throws clause
-  syntax Throws ::= "throws" Types
+  // Update the static semantics configuration to include exception tracking
+  syntax FunctionInfo ::= "(" TypeList ")" "->" Type  // (Throws) -> ReturnType
+  syntax FunctionEnv ::= Map
 
-  // Function declaration with optional throws clause
-  syntax Param ::= Type Id
-  syntax Params ::= List{Param,","}
+  configuration <T>
+                      <tasks>
+                        <task>
+                          <k> $PGM:Pgm </k>
+                          <tenv> .Map </tenv>
+                          <returnType> void </returnType>
+                          <exenv> .Set </exenv> // Track exceptions that can be thrown
+                        </task>
+                      </tasks>
+                      <gtenv> .Map </gtenv> // Global Type Environment: Function Name -> FunctionInfo
+                      <store> .Map </store>
+                      <busy> .Set </busy>
+                      <terminated> .Set </terminated>
+                      <input> .List </input>
+                      <output> .List </output>
+                      <nextLoc> 0 </nextLoc>
+                    </T>
 
-  syntax Stmt ::= Type Id "(" Params ")" Throws? Block
+  // Function declaration rule with 'throws'
+  rule <task> <k> T:Type F:Id(Ps:ParamsAndThrows) S => declareFunction(F, T, Ps, S) ... </k> </task>
+       (.Bag => <task>
+               <k> declareFunction(F, T, Ps, S) </k>
+               <tenv> .Map </tenv>
+               <returnType> T </returnType>
+               <exenv> .Set </exenv> // Initially, no exceptions
+             </task>)
+       requires notBool(F in keys(gtenv))
+  
+  // Define declareFunction helper
+  syntax Stmt ::= "declareFunction" "(" Id "," Type "," ParamsAndThrows "," Stmt ")" [function]
+  
+  rule declareFunction(F, T, Ps, S) => declareFunctionHelper(F, T, Ps, S)
+  
+  // Helper rule to populate gtenv with function type info
+  syntax Stmt ::= "declareFunctionHelper" "(" Id "," Type "," ParamsAndThrows "," Stmt ")" [function]
+  
+  rule declareFunctionHelper(F, T, Ps, S) => .K
+       <gtenv> .Map => F |-> (throwsTypes -> T) </gtenv>
+       <tasks> <task> <k> S ~> handleFunctionReturn </k> <tenv> Rho </tenv> <returnType> T </returnType> <exenv> ThrowsList </exenv> </task> </tasks>
+    requires
+      // Extract throwsTypes from ParamsAndThrows
+      ThrowsList = getThrowsList(Ps)
+  
+  // Extract ThrowsList from ParamsAndThrows
+  syntax ThrowsList ::= List{Type,","}
+  
+  rule getThrowsList(Ps, "throws" Ts) => Ts
+  rule getThrowsList(Ps, _) => .List // No throws clause means no exceptions
 
-  // ... rest of the syntax definitions ...
+  // Handle Function Return (simplified for illustration)
+  syntax Stmt ::= "handleFunctionReturn"
 
-endmodule
-
-module SIMPLE-TYPED-STATIC
-  imports SIMPLE-TYPED-STATIC-SYNTAX
-  imports DOMAINS
-
-  // Typing Environments and Exception Sets
-  syntax TypeEnv ::= Map
-  syntax ExceptionTypes ::= Set
-
-  // Typing Judgments
-  syntax KItem ::= TypeEnv "|-" Stmt ":" TypeEnv "," ExceptionTypes
-                 | TypeEnv "|-" Exp ":" Type "," ExceptionTypes
-
-  // Function Type with Optional Throws Clause
-  syntax FunctionType ::= Types "->" Type
-                        | FunctionType "throws" Types
-
-  // Adjust Type to include FunctionType
-  syntax Type ::= FunctionType
-
-  // Helper Functions to Extract Types
-  syntax Types ::= paramTypes(Params) [function]
-  syntax TypeEnv ::= paramEnv(Params) [function]
-
-  rule paramTypes(.Params) => .Types
-  rule paramTypes((T:Type _)) => T ,.Types
-  rule paramTypes((T:Type _) Ps:Params) => T , paramTypes(Ps)
-
-  rule paramEnv(.Params) => .Map
-  rule paramEnv((T:Type X:Id)) => X |-> T
-  rule paramEnv((T:Type X:Id) Ps:Params) => (X |-> T) paramEnv(Ps)
-
-  // Typing Rule for Function Declaration with Throws Clause
-  rule <k> TE |- T:Type F:Id(Ps:Params) Throws:Throws Block : TE, .Set </k>
+  rule <k> handleFunctionReturn => .K ... </k>
+       <control> ... </control>
        <env> ... </env>
+  
+  // Modify function calls to include exception handling
+  // Assume function calls are expressions like F(args)
+  
+  rule <k> F(args) => callFunction(F, args) ... </k>
+       <env> Env => Env[F <- L] </env>
+       <store>... .Map => L |-> lambda(T, Ps, S) ...</store>
+       <exenv> CurrentThrows </exenv>
+    requires hasFunction(F, ThrowsList -> T)
+       && matchFunctionSignature(F, args)
+  
+  // Define callFunction helper
+  syntax Stmt ::= "callFunction" "(" Id "," Vals ")" [function]
+  
+  rule callFunction(F, Args) => executeFunction(F, Args)
+  
+  // Execute the function: push a new task with updated exenv
+  syntax Stmt ::= "executeFunction" "(" Id "," Vals ")" [function]
+  
+  rule executeFunction(F, Args) => .K
+       <tasks> <task>
+                 <k> executeFunctionTask(F, Args) </k>
+                 <tenv> declareParameters(Ps, Args) </tenv>
+                 <returnType> T </returnType>
+                 <exenv> ThrowsList </exenv>
+               </task>
+             </tasks>
+       <gtenv> .Map => ... </gtenv>
     requires
-      ParamTypes == paramTypes(Ps)
-      andBool ParamEnv == paramEnv(Ps)
-      andBool FunctionType == ParamTypes -> T
-      andBool (Throws == (.Throws) andBool Es == .Set)
-            orBool (Throws == throws Es)
-            andBool FunctionType' == FunctionType throws Es
-      andBool TE1 == TE [F <- FunctionType']
-      andBool TE2 == TE1 ++ ParamEnv
-      andBool TE2 |- Block : _, Es_body
-      andBool Es_body SetSubsetEq Es
-
-  syntax Throws ::= ".Throws" [token]
-  rule Throws ==K .Throws => true
-
-  // Typing Rule for Function Call
-  rule <k> TE |- F:Id(Es:Exps) : T, Es_f </k>
-    requires
-      TE [F] ==K FunctionType'
-      andBool FunctionType' == ParamTypes -> T' throws Es_f
-      andBool checkArgs(TE, Es, ParamTypes)
-      andBool T ==K T'
-
-  // Helper Function to Check Arguments
-  syntax Bool ::= checkArgs(TypeEnv, Exps, Types) [function]
-  rule checkArgs(TE, .Exps, .Types) => true
-  rule checkArgs(TE, (E:Exp Es:Exps), (T:Type Ts:Types)) =>
-    (TE |- E : T_e, _) andBool T_e ==K T andBool checkArgs(TE, Es, Ts)
-  rule checkArgs(_, _, _) => false [owise]
-
-  // Typing Rule for Throw Statement
-  rule <k> TE |- throw E:Exp ; : TE, SetItem(T_e) </k>
-    requires TE |- E : T_e, _
-
-  // Typing Rule for Try-Catch Statement
-  rule <k> TE |- try S1 catch (T X) S2 : TE'', Es2 </k>
-    requires
-      TE |- S1 : TE', Es1
-      andBool TE [X <- T] |- S2 : TE'', Es2'
-      andBool Es2 == (Es1 SetDifference SetItem(T)) SetUnion Es2'
-
-  // Typing Rule for Statements Sequence
-  rule <k> TE |- (S1 S2) : TE'', Es12 </k>
-    requires
-      TE |- S1 : TE', Es1
-      andBool TE' |- S2 : TE'', Es2
-      andBool Es12 == Es1 SetUnion Es2
-
-  // Typing Rule for Blocks
-  rule <k> TE |- {S} : TE', Es </k>
-    requires TE |- S : TE', Es
-
-  // Typing Rule for If Statement
-  rule <k> TE |- if (E) S1 else S2 : TE'', Es </k>
-    requires
-      TE |- E : bool, Es_e
-      andBool TE |- S1 : TE', Es1
-      andBool TE |- S2 : TE'', Es2
-      andBool Es == Es_e SetUnion Es1 SetUnion Es2
-
-  // Typing Rule for While Loop
-  rule <k> TE |- while (E) S : TE, Es </k>
-    requires
-      TE |- E : bool, Es_e
-      andBool TE |- S : _, Es_s
-      andBool Es == Es_e SetUnion Es_s
-
-  // ... rest of the typing rules for other statements ...
-
+      // Retrieve function info
+      FunctionInfo = gtenv[F]
+      ThrowsList = throwsTypes(FunctionInfo)
+      T = returnType(FunctionInfo)
+  
+  // Implement executeFunctionTask (simplified)
+  syntax Stmt ::= "executeFunctionTask" "(" Id "," Vals ")" [function]
+  
+  rule executeFunctionTask(F, Args) => S ~> handleFunctionReturn
+       <tenv> ... </tenv>
+       <exenv> ThrowsList </exenv>
+    where
+      // Assume 'S' is the function body retrieved from gtenv
+      S = getFunctionBody(F)
+  
+  // Modify throw rule to ensure exceptions are declared or handled
+  rule <k> throw V:Val; ~> _ => throwException(V) ... </k>
+       <control>
+         <xstack> ListItem((T:Type, X:Id, S:Stmt)) ...</xstack>
+       </control>
+       <env> Env </env>
+       requires typeOf(V) ==K T
+  
+  // Define throwException helper
+  syntax Stmt ::= "throwException" "(" Val ")" [function]
+  
+  rule throwException(V) => handleThrow(V)
+  
+  // HandleThrow: Check if current function can throw this exception
+  syntax Stmt ::= "handleThrow" "(" Val ")" [function]
+  
+  rule handleThrow(V) => .K
+       <exenv> CurrentThrows </exenv>
+       requires typeOf(V) in CurrentThrows
+       =>
+         // Handle the exception or propagate it based on xstack
+         if (canHandle(V)) {
+           // Execute catch block
+         } else {
+           // Propagate upward
+           .K // stuck or rethrow
+         }
+  
+  // Additional rules and helpers as necessary
+  
 endmodule
