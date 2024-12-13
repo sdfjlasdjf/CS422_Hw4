@@ -244,12 +244,6 @@ module SIMPLE-UNTYPED
 
   syntax KItem ::= (Stmt, ControlCellFragment, Map, K)
 
-  rule <k> for(_; E; _) S ~> K => (if (E) {S for(_; E; _) S} else {}) ~> K </k>
-      <control>
-        <bstack> .List => ListItem((for(_; E; _) S, C, Env, K)) ... </bstack>
-        C
-      </control>
-         <env> Env </env>
 
   rule <k> while (E) S ~> K => (if (E) {S while(E)S} else {})~> K</k>
       <control>
