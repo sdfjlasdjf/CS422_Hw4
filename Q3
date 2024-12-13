@@ -89,8 +89,8 @@ module SIMPLE-TYPED-STATIC
                     <task multiplicity="*" color="yellow" type="Set">
                       <k color="green"> $PGM:Stmt </k>
                       <tenv multiplicity="?" color="cyan"> .Map </tenv>
-                      <returnType multiplicity="?" color="Orchid"> void </returnType>
-                      <throwStack multiplicity="?" color="red"> .List </throwStack> 
+                      <returnType multiplicity="?"> void </returnType>
+                      <throwStack multiplicity="?"> .List </throwStack> 
                     </task>
                   </tasks>
 //                  <br/>
