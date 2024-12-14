@@ -182,7 +182,7 @@ module SIMPLE-TYPED-STATIC
   rule <k> return; => stmt ...</k> <returnType> _ </returnType>
 
   rule {} => block
-
+// {int x = 1; {S} int x = 2;} => {stmt int x = 2;}  
   rule <task> <k> {S} => block ...</k> <tenv> Rho </tenv> <currEnvVar> _ </currEnvVar> R </task>
        (.Bag => <task> <k> S </k> <tenv> Rho </tenv> <currEnvVar> .Set </currEnvVar> R </task>)
 
