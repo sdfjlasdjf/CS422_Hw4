@@ -96,27 +96,18 @@ module SIMPLE-TYPED-STATIC
                   <gtenv color="blue"> .Map </gtenv>
                 </T>
 
+
   rule <k> T:Type X:Id; => stmt ... </k>
       <tenv> Rho => Rho[X <- T] </tenv>
       <currEnvVar> Phi => Phi SetItem(X) </currEnvVar>
     requires notBool (X in Phi) 
 
-// rule <k> T:Type X:Id; => stmt ... </k>
-//         <tenv> Rho => (Rho[X <- T]) </tenv>
-//       requires notBool (X in keys(Rho))
-  
   rule <task> <k> T:Type X:Id; => stmt ...</k> </task>
        <gtenv> Rho (.Map => X |-> T) </gtenv>
     requires notBool(X in keys(Rho))
   
   
-  // rule <k> T:Type X:Id; => stmt ...</k> 
-  //     <gtenv> ... Rho2 ... </gtenv>
-  //     <tenv> Rho => (Rho[X <- T]) </tenv>
-  //     // <gtenv> ... Rho2 ... </gtenv>
-  //     // <gtenv> Rho2 </gtenv> 
-  //     // <tenv> Rho:Map => (Rho[X <- T]) </tenv>
-  //     requires notBool (X in keys(Rho))
+
 
   context _:Type _::Exp[HOLE::Exps];
 // The rule below may need to sort E to Exp in the future, if the
